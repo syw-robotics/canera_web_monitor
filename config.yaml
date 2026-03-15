@@ -4,13 +4,9 @@ server:
   debug: false
 
 camera:
-  source: "webcam"
-  webcam_index: 1
-  width: 640
-  height: 480
-  fps: 30
-  enable_rgb: true
-  enable_depth: true
-  align_depth: true
-  depth_colormap: "JET"
-  jpeg_quality: 85
+  # source: "opencv"
+  source: "realsense"
+
+recording:
+  output_dir: "recordings"
+  format: "mp4"

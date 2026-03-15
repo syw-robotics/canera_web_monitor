@@ -1,0 +1,6 @@
+stream_sources: [depth, color, combined]
+width: 640
+height: 480
+fps: 30
+align_depth: false
+depth_mode: "raw" # "colorized" (color-mapped visualization), "raw" (16-bit depth values), "normalized" (8-bit normalized)

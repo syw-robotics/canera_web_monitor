@@ -1,0 +1,5 @@
+stream_sources: [rgb]
+webcam_index: 0
+width: 640
+height: 480
+fps: 60

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Monitor</title>
+    <style>
+        :root {
+            color-scheme: dark;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+        }
+
+        .page {
+            max-width: 1320px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .title {
+            margin: 0;
+            font-size: 30px;
+        }
+
+        .subtitle {
+            margin: 8px 0 0;
+            color: #94a3b8;
+        }
+
+        .status {
+            min-width: 280px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: #111827;
+            border: 1px solid #1f2937;
+        }
+
+        .status strong {
+            display: block;
+            margin-bottom: 6px;
+            color: #22c55e;
+        }
+
+        .status.error strong {
+            color: #ef4444;
+        }
+
+        .grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 18px;
+        }
+
+        .card {
+            background: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 18px;
+            gap: 12px;
+        }
+
+        .card h3 {
+            margin: 0;
+            font-size: 20px;
+        }
+
+        .card-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .card img {
+            display: block;
+            width: 100%;
+            background: #020617;
+        }
+
+        .controls {
+            display: flex;
+            gap: 8px;
+            padding: 12px 18px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            background: #1f2937;
+            color: #e2e8f0;
+        }
+
+        .btn:hover {
+            background: #374151;
+        }
+
+        .btn.recording {
+            background: #ef4444;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .recording-indicator {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            padding: 12px 20px;
+            background: #ef4444;
+            border: 2px solid #dc2626;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: bold;
+            z-index: 1000;
+            animation: pulse 2s infinite;
+        }
+
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background: #111827;
+            border: 1px solid #1f2937;
+            border-radius: 8px;
+            color: #e2e8f0;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        .main-card {
+            grid-column: 1 / -1;
+        }
+
+        .card:not(.main-card) {
+            max-width: 640px;
+        }
+
+        .meta {
+            margin-top: 18px;
+            color: #94a3b8;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .title {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="page">
+        <div class="header">
+            <div>
+                <h1 class="title">Camera Monitor</h1>
+            </div>
+            <div class="status" id="status-box">
+                <strong id="status-title">Connecting to Camera</strong>
+                <span id="status-text">Waiting for backend status...</span>
+            </div>
+        </div>
+
+        <div class="grid" id="streams-container">
+        </div>
+
+    </div>
+
+    <script>
+        const recordings = {};
+        const streamNames = {
+            'rgb': 'RGB Stream',
+            'color': 'Color Stream',
+            'depth': 'Depth Stream',
+            'combined': 'Combined Stream'
+        };
+
+        function initStreams(streams) {
+            const container = document.getElementById('streams-container');
+            const existingStreams = Array.from(container.querySelectorAll('.card')).map(c => c.dataset.stream);
+
+            if (existingStreams.join(',') === streams.join(',')) return;
+
+            container.innerHTML = '';
+
+            streams.forEach((stream, idx) => {
+                const card = document.createElement('section');
+                card.className = idx === 0 ? 'card main-card' : 'card';
+                card.dataset.stream = stream;
+                const isRecording = recordings[stream];
+                card.innerHTML = `
+                    <div class="card-header">
+                        <h3>${streamNames[stream] || stream}</h3>
+                        <div class="card-controls">
+                            <button class="btn" onclick="toggleFullscreen(this.closest('.card').querySelector('img'))">Fullscreen</button>
+                            <button class="btn ${isRecording ? 'recording' : ''}" onclick="toggleRecording('${stream}', this)">${isRecording ? 'Stop' : 'Record'}</button>
+                        </div>
+                    </div>
+                    <img src="/stream/${stream}" alt="${stream}" onclick="toggleFullscreen(this)">
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function toggleFullscreen(img) {
+            if (!document.fullscreenElement) {
+                img.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        async function toggleRecording(stream, btn) {
+            if (recordings[stream]) {
+                const res = await fetch(`/api/recording/${stream}/stop`, { method: 'POST' });
+                const data = await res.json();
+                recordings[stream] = false;
+                btn.classList.remove('recording');
+                btn.textContent = 'Record';
+                updateRecordingIndicator();
+                showToast(data.message || 'Recording stopped');
+            } else {
+                const res = await fetch(`/api/recording/${stream}/start`, { method: 'POST' });
+                const data = await res.json();
+                recordings[stream] = true;
+                btn.classList.add('recording');
+                btn.textContent = 'Stop';
+                updateRecordingIndicator();
+                showToast(data.message || 'Recording started');
+            }
+        }
+
+        function updateRecordingIndicator() {
+            const existing = document.querySelector('.recording-indicator');
+            if (existing) existing.remove();
+
+            const activeRecordings = Object.keys(recordings).filter(k => recordings[k]);
+            if (activeRecordings.length > 0) {
+                const indicator = document.createElement('div');
+                indicator.className = 'recording-indicator';
+                indicator.textContent = `● Recording: ${activeRecordings.join(', ')}`;
+                document.body.appendChild(indicator);
+            }
+        }
+
+        async function refreshStatus() {
+            try {
+                const response = await fetch("/api/status");
+                const data = await response.json();
+                const statusBox = document.getElementById("status-box");
+                const statusTitle = document.getElementById("status-title");
+                const statusText = document.getElementById("status-text");
+
+                if (data.available_streams && data.available_streams.length > 0) {
+                    initStreams(data.available_streams);
+                }
+
+                if (data.last_error) {
+                    statusBox.classList.add("error");
+                    statusTitle.textContent = "Camera Error";
+                    statusText.textContent = data.last_error;
+                } else {
+                    statusBox.classList.remove("error");
+                    statusTitle.textContent = data.running ? "Camera Stream Running" : "Waiting for Camera";
+                    statusText.textContent = `Source: ${data.camera_source} | ${data.width}x${data.height} @ ${data.fps}fps | Streams: ${data.available_streams.join(", ")}`;
+                }
+            } catch (error) {
+                document.getElementById("status-box").classList.add("error");
+                document.getElementById("status-title").textContent = "Unable to connect to backend";
+                document.getElementById("status-text").textContent = error.message;
+            }
+        }
+
+        refreshStatus();
+        setInterval(refreshStatus, 2000);
+    </script>
+</body>
+</html>
